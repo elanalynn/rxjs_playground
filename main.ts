@@ -2,7 +2,7 @@ import { Observable, Observer } from 'rxjs';
 let dot = document.getElementById('dot');
 let output = document.getElementById('output');
 let button = document.getElementById('button');
-let url = 'https://zebras-ek.herokuapp.com/zebras';
+let url = 'https://zebras-ek.herokuapp.com/zebraxs';
 
 // let numbers = [1, 2, 3, 6, 7, 9];
 // let source = Observable.from(numbers);
@@ -71,9 +71,9 @@ let mouseEventsStream = Observable.fromEvent(document, 'mousemove')
             x: e.clientX,
             y: e.clientY
         }
-    })
+    });
     // .filter(value => value.x < 1000)
-    .delay(300);
+    // .delay(300);
 
 mouseEventsStream.subscribe(
     v => moveDot(v),
@@ -83,30 +83,56 @@ mouseEventsStream.subscribe(
 
 function moveDot(v){
     console.log(v);
-    dot.style.left = (v.x - 30).toString();
-    dot.style.top = (v.y - 30).toString();
+    dot.style.left = (v.x).toString();
+    dot.style.top = (v.y).toString();
 }
 
 let click = Observable.fromEvent(button, 'click');
 
 function load(url: string){
-    let xhr = new XMLHttpRequest();
+    return Observable.create(observer => {
+        let xhr = new XMLHttpRequest();
 
-    xhr.addEventListener('load', () => {
-        let zebras = JSON.parse(xhr.responseText);
-        zebras.forEach(zebra => {
-            let div = document.createElement('div');
-            div.innerText = zebra.name;
-            output.appendChild(div);
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+                let zebras = JSON.parse(xhr.responseText);
+                observer.next(zebras);
+                observer.complete();
+            } else {
+                observer.error(xhr.statusText);
+            }
+
         });
-    });
-    xhr.open('GET', url);
-    xhr.send();
+        xhr.open('GET', url);
+        xhr.send();
+    })
+    .retryWhen(retryStrategy());
 } 
 
-click.subscribe(
-    e => load(url),
-    e => console.error(e),
-    () => console.log('complete')
-);
 
+click.flatMap(e => load(url))
+    .subscribe(
+        renderZebras,
+        e => console.error(e),
+        () => console.log('complete')
+    );
+
+function renderZebras(zebras){
+    zebras.forEach(zebra => {
+        let div = document.createElement('div');
+        div.innerText = zebra.name + ' from ' + zebra.location + ' with ' + zebra.stripes + ' stripes.';
+        output.appendChild(div);
+    });
+}
+
+function retryStrategy(){
+    return function(errors){
+        return errors
+            .scan((acc, val) => {
+                console.log(acc, val);
+                return acc + 1;
+            }, 0)
+            .takeWhile(acc => acc < 4)
+            .delay(1000);
+    }
+}
